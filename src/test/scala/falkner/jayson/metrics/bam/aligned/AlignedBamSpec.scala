@@ -1,15 +1,18 @@
 package falkner.jayson.metrics.bam.aligned
 
-import java.nio.file.Paths
 
+import falkner.jayson.metrics.io.CSV
 import org.specs2.mutable.Specification
 
 
 class AlignedBamSpec extends Specification {
 
-  "Metadata checking" should {
-    "Load from metadata.xml file" in {
-      1 mustEqual 1
+  "Aligned BAM" should {
+    "Current version calculates without error" in {
+      AlignedBam.version != null mustEqual true
+    }
+    "Support blank CSV generation" in {
+      CSV(AlignedBam.blank).all != null mustEqual true
     }
 
   }

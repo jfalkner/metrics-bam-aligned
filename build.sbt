@@ -1,6 +1,6 @@
 name := "Aligned Bam Metrics"
 
-version in ThisBuild := "0.0.1"
+version in ThisBuild := "0.0.2"
 
 organization in ThisBuild := "com.pacb"
 
