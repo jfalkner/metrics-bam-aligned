@@ -1,6 +1,7 @@
 package falkner.jayson.metrics.bam.aligned
 
 import java.nio.file.{Files, Path}
+import java.text.DecimalFormat
 
 import falkner.jayson.metrics.Distribution._
 import falkner.jayson.metrics._
@@ -18,6 +19,8 @@ object AlignedBam_v1_4 {
   case class Read(name: String, len: Int, lenCovered: Int, refLen: Int, mappingQuality: Int, refAccClip: Float, refAccNoClip: Float, readAccClip: Float, readAccNoClip: Float, cigar: Cigar)
   case class Cigar(M: Int, I: Int, D: Int, N: Int, S: Int, H: Int, P: Int, EQ:Int, X: Int)
 
+  lazy val sixFractionDigits = new DecimalFormat("#.######")
+
   class ReadMetric(r: Read) extends Metrics {
     override val namespace: String = "Read"
     override val version: String = "_"
@@ -25,11 +28,11 @@ object AlignedBam_v1_4 {
       Str("Name", r.name),
       Num("Read Length", r.len),
       Num("Ref Length", r.refLen),
-      Num("Mapping Quality", r.mappingQuality),
-      Num("Ref Accuracy (Clip)", r.refAccClip),
-      Num("Ref Accuracy (No Clip)", r.refAccNoClip),
-      Num("Read Accuracy (Clip)", r.readAccClip),
-      Num("Read Accuracy (No Clip)", r.readAccNoClip),
+      Num("Mapping Quality", r.mappingQuality, sixFractionDigits),
+      Num("Ref Accuracy (Clip)", r.refAccClip, sixFractionDigits),
+      Num("Ref Accuracy (No Clip)", r.refAccNoClip, sixFractionDigits),
+      Num("Read Accuracy (Clip)", r.readAccClip, sixFractionDigits),
+      Num("Read Accuracy (No Clip)", r.readAccNoClip, sixFractionDigits),
       Num("M", r.cigar.M),
       Num("D", r.cigar.D),
       Num("I", r.cigar.I),
@@ -93,18 +96,18 @@ class AlignedBam_v1_4(p: Path, nBins: Int = 30) extends Metrics {
     Dist("Read Length", mergeDiscrete(chunks.map(_.readLength))),
     Dist("Mapping Quality", mergeDiscrete(chunks.map(_.mappingQuality))),
     // accuracies
-    DistCon("Accuracy (Clip)", mergeContinuous(chunks.map(_.refAccuracyWithClip), forceMin = Some(freqMin), forceMax = Some(freqMax))),
-    DistCon("Accuracy (No Clip)", mergeContinuous(chunks.map(_.refAccuracyNoClip), forceMin = Some(freqMin), forceMax = Some(freqMax))),
-    DistCon("Accuracy (Read-based w/Clip)", mergeContinuous(chunks.map(_.readAccuracyWithClip), forceMin = Some(freqMin), forceMax = Some(freqMax))),
-    DistCon("Accuracy (Read-based No Clip)", mergeContinuous(chunks.map(_.readAccuracyNoClip), forceMin = Some(freqMin), forceMax = Some(freqMax))),
+    DistCon("Accuracy (Clip)", mergeContinuous(chunks.map(_.refAccuracyWithClip), forceMin = Some(freqMin), forceMax = Some(freqMax)), sixFractionDigits),
+    DistCon("Accuracy (No Clip)", mergeContinuous(chunks.map(_.refAccuracyNoClip), forceMin = Some(freqMin), forceMax = Some(freqMax)), sixFractionDigits),
+    DistCon("Accuracy (Read-based w/Clip)", mergeContinuous(chunks.map(_.readAccuracyWithClip), forceMin = Some(freqMin), forceMax = Some(freqMax)), sixFractionDigits),
+    DistCon("Accuracy (Read-based No Clip)", mergeContinuous(chunks.map(_.readAccuracyNoClip), forceMin = Some(freqMin), forceMax = Some(freqMax)), sixFractionDigits),
     // mutation frequencies
-    DistCon("Match or Mismatch Freq.", mergeContinuous(chunks.map(_.matchOrMismatchFrequency), forceMin = Some(freqMin), forceMax = Some(freqMax))),
-    DistCon("Del Freq.", mergeContinuous(chunks.map(_.delFrequency), forceMin = Some(freqMin), forceMax = Some(freqMax))),
-    DistCon("Ins Freq.", mergeContinuous(chunks.map(_.insFrequency), forceMin = Some(freqMin), forceMax = Some(freqMax))),
-    DistCon("Skip Freq.", mergeContinuous(chunks.map(_.skipFrequency), forceMin = Some(freqMin), forceMax = Some(freqMax))),
-    DistCon("Soft Clip Freq.", mergeContinuous(chunks.map(_.softClipFrequency), forceMin = Some(freqMin), forceMax = Some(freqMax))),
-    DistCon("Hard Clip Freq.", mergeContinuous(chunks.map(_.hardClipFrequency), forceMin = Some(freqMin), forceMax = Some(freqMax))),
-    DistCon("Mismatch Freq.", mergeContinuous(chunks.map(_.mismatchFrequency), forceMin = Some(freqMin), forceMax = Some(freqMax)))
+    DistCon("Match or Mismatch Freq.", mergeContinuous(chunks.map(_.matchOrMismatchFrequency), forceMin = Some(freqMin), forceMax = Some(freqMax)), sixFractionDigits),
+    DistCon("Del Freq.", mergeContinuous(chunks.map(_.delFrequency), forceMin = Some(freqMin), forceMax = Some(freqMax)), sixFractionDigits),
+    DistCon("Ins Freq.", mergeContinuous(chunks.map(_.insFrequency), forceMin = Some(freqMin), forceMax = Some(freqMax)), sixFractionDigits),
+    DistCon("Skip Freq.", mergeContinuous(chunks.map(_.skipFrequency), forceMin = Some(freqMin), forceMax = Some(freqMax)), sixFractionDigits),
+    DistCon("Soft Clip Freq.", mergeContinuous(chunks.map(_.softClipFrequency), forceMin = Some(freqMin), forceMax = Some(freqMax)), sixFractionDigits),
+    DistCon("Hard Clip Freq.", mergeContinuous(chunks.map(_.hardClipFrequency), forceMin = Some(freqMin), forceMax = Some(freqMax)), sixFractionDigits),
+    DistCon("Mismatch Freq.", mergeContinuous(chunks.map(_.mismatchFrequency), forceMin = Some(freqMin), forceMax = Some(freqMax)), sixFractionDigits)
   )
 
   def handleReads(buf: Seq[Read]): Chunk = Chunk(
