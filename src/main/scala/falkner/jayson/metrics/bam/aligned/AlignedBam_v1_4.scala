@@ -15,7 +15,6 @@ import scala.concurrent.duration.Duration
 import scala.util.{Failure, Success, Try}
 
 object AlignedBam_v1_4 {
-  // stashes the per-read metrics (probably want to export these too sometime?)
   case class Read(name: String, len: Int, lenCovered: Int, refLen: Int, mappingQuality: Int, refAccClip: Float, refAccNoClip: Float, readAccClip: Float, readAccNoClip: Float, cigar: Cigar)
   case class Cigar(M: Int, I: Int, D: Int, N: Int, S: Int, H: Int, P: Int, EQ:Int, X: Int)
 
@@ -60,19 +59,33 @@ object AlignedBam_v1_4 {
 
   case class Chunk(size: Long,
                    totalReadLength: Long,
-                   totalReadLengthCovered: Long,
+                   //totalReadLengthCovered: Long,
+                   // cigar op tallies
+                   totalMatchOrMismatch: Long,
+                   totalIns: Long,
+                   totalDel: Long,
+                   totalSkip: Long,
+                   totalSoftClip: Long,
+                   totalHardClip: Long,
+                   totalPadding: Long,
+                   totalMatch: Long,
+                   totalMismatch: Long,
+                   // distributions
                    readLength: Discrete,
                    mappingQuality: Discrete,
                    refAccuracyWithClip: Continuous,
                    refAccuracyNoClip: Continuous,
                    readAccuracyWithClip: Continuous,
                    readAccuracyNoClip: Continuous,
+                  // cigar op frequency dists
                    matchOrMismatchFrequency: Continuous,
-                   delFrequency: Continuous,
                    insFrequency: Continuous,
+                   delFrequency: Continuous,
                    skipFrequency: Continuous,
                    softClipFrequency: Continuous,
                    hardClipFrequency: Continuous,
+                   paddingFrequency: Continuous,
+                   matchFrequency: Continuous,
                    mismatchFrequency: Continuous)
 
   val (freqMin, freqMax) = (0.0f, 1.0f)
@@ -92,7 +105,17 @@ class AlignedBam_v1_4(p: Path, nBins: Int = 30) extends Metrics {
     Str("Spec Version", AlignedBam_v1_4.version),
     Num("Reads", chunks.map(_.size).sum),
     Num("Total Read Length", chunks.map(_.totalReadLength).sum),
-    Num("Total Read Length (Covered)", chunks.map(_.totalReadLengthCovered).sum),
+    // totals for each cigar element
+    Num("Total Match or Mismatch", chunks.map(_.totalMatchOrMismatch).sum),
+    Num("Total Ins", chunks.map(_.totalIns).sum),
+    Num("Total Del", chunks.map(_.totalDel).sum),
+    Num("Total Skip", chunks.map(_.totalSkip).sum),
+    Num("Total Soft Clip", chunks.map(_.totalSoftClip).sum),
+    Num("Total Hard Clip", chunks.map(_.totalHardClip).sum),
+    Num("Total Padding", chunks.map(_.totalHardClip).sum),
+    Num("Total Match", chunks.map(_.totalMatch).sum),
+    Num("Total Mismatch", chunks.map(_.totalMismatch).sum),
+    //Num("Total Read Length (Covered)", chunks.map(_.totalReadLengthCovered).sum),
     Dist("Read Length", mergeDiscrete(chunks.map(_.readLength))),
     Dist("Mapping Quality", mergeDiscrete(chunks.map(_.mappingQuality))),
     // accuracies
@@ -107,13 +130,25 @@ class AlignedBam_v1_4(p: Path, nBins: Int = 30) extends Metrics {
     DistCon("Skip Freq.", mergeContinuous(chunks.map(_.skipFrequency), forceMin = Some(freqMin), forceMax = Some(freqMax)), sixFractionDigits),
     DistCon("Soft Clip Freq.", mergeContinuous(chunks.map(_.softClipFrequency), forceMin = Some(freqMin), forceMax = Some(freqMax)), sixFractionDigits),
     DistCon("Hard Clip Freq.", mergeContinuous(chunks.map(_.hardClipFrequency), forceMin = Some(freqMin), forceMax = Some(freqMax)), sixFractionDigits),
+    DistCon("Padding Freq.", mergeContinuous(chunks.map(_.paddingFrequency), forceMin = Some(freqMin), forceMax = Some(freqMax)), sixFractionDigits),
+    DistCon("Match Freq.", mergeContinuous(chunks.map(_.matchFrequency), forceMin = Some(freqMin), forceMax = Some(freqMax)), sixFractionDigits),
     DistCon("Mismatch Freq.", mergeContinuous(chunks.map(_.mismatchFrequency), forceMin = Some(freqMin), forceMax = Some(freqMax)), sixFractionDigits)
   )
 
   def handleReads(buf: Seq[Read]): Chunk = Chunk(
     buf.size,
     buf.map(_.len).sum, // read length
-    buf.map(_.lenCovered).sum, // read length covered
+    // mutation tallies
+    buf.map(_.cigar.M.toLong).sum,
+    buf.map(_.cigar.I.toLong).sum,
+    buf.map(_.cigar.D.toLong).sum,
+    buf.map(_.cigar.N.toLong).sum,
+    buf.map(_.cigar.S.toLong).sum,
+    buf.map(_.cigar.H.toLong).sum,
+    buf.map(_.cigar.P.toLong).sum,
+    buf.map(_.cigar.EQ.toLong).sum,
+    buf.map(_.cigar.X.toLong).sum,
+    // distributions
     calcDiscrete(buf.map(_.len)),
     calcDiscrete(buf.map(_.mappingQuality)), // mappingQualityDist,
     // accuracies
@@ -122,13 +157,15 @@ class AlignedBam_v1_4(p: Path, nBins: Int = 30) extends Metrics {
     calcContinuous(buf.map(_.readAccClip), forceMin = Some(freqMin), forceMax = Some(freqMax)),
     calcContinuous(buf.map(_.readAccNoClip), forceMin = Some(freqMin), forceMax = Some(freqMax)),
     // mutation frequencies
-    calcContinuous(buf.map(v => v.cigar.M.toFloat / v.len), forceMin = Some(freqMin), forceMax = Some(freqMax)), // matchOrMismatchFrequency,
-    calcContinuous(buf.map(v => v.cigar.D.toFloat / v.len), forceMin = Some(freqMin), forceMax = Some(freqMax)), // delFrequency,
-    calcContinuous(buf.map(v => v.cigar.I.toFloat / v.len), forceMin = Some(freqMin), forceMax = Some(freqMax)), // insFrequency,
-    calcContinuous(buf.map(v => v.cigar.N.toFloat / v.len), forceMin = Some(freqMin), forceMax = Some(freqMax)), // skipFrequency,
-    calcContinuous(buf.map(v => v.cigar.S.toFloat / v.len), forceMin = Some(freqMin), forceMax = Some(freqMax)), // softClipFrequency,
-    calcContinuous(buf.map(v => v.cigar.H.toFloat / v.len), forceMin = Some(freqMin), forceMax = Some(freqMax)), // hardClipFrequency,
-    calcContinuous(buf.map(v => v.cigar.X.toFloat / v.len), forceMin = Some(freqMin), forceMax = Some(freqMax))) // mismatchFrequency)
+    calcContinuous(buf.map(v => v.cigar.M.toFloat / v.len), forceMin = Some(freqMin), forceMax = Some(freqMax)), // match or mismatch frequency
+    calcContinuous(buf.map(v => v.cigar.I.toFloat / v.len), forceMin = Some(freqMin), forceMax = Some(freqMax)), // ins frequency
+    calcContinuous(buf.map(v => v.cigar.D.toFloat / v.len), forceMin = Some(freqMin), forceMax = Some(freqMax)), // del frequency
+    calcContinuous(buf.map(v => v.cigar.N.toFloat / v.len), forceMin = Some(freqMin), forceMax = Some(freqMax)), // skip frequency
+    calcContinuous(buf.map(v => v.cigar.S.toFloat / v.len), forceMin = Some(freqMin), forceMax = Some(freqMax)), // soft clip Frequency
+    calcContinuous(buf.map(v => v.cigar.H.toFloat / v.len), forceMin = Some(freqMin), forceMax = Some(freqMax)), // hard clip Frequency
+    calcContinuous(buf.map(v => v.cigar.P.toFloat / v.len), forceMin = Some(freqMin), forceMax = Some(freqMax)), // padding Frequency
+    calcContinuous(buf.map(v => v.cigar.EQ.toFloat / v.len), forceMin = Some(freqMin), forceMax = Some(freqMax)), // match frequency
+    calcContinuous(buf.map(v => v.cigar.X.toFloat / v.len), forceMin = Some(freqMin), forceMax = Some(freqMax))) // mismatch frequency)
 
   def makeRead(r: SAMRecord): Read = {
     // calculate all per-read metrics in parallel
@@ -147,8 +184,8 @@ class AlignedBam_v1_4(p: Path, nBins: Int = 30) extends Metrics {
       readAccuracyNoClip(readLen, c),
       Cigar(
         c.getOrElse("M" , 0),
-        c.getOrElse("D" , 0),
         c.getOrElse("I" , 0),
+        c.getOrElse("D" , 0),
         c.getOrElse("N" , 0),
         c.getOrElse("S" , 0),
         c.getOrElse("H" , 0),
@@ -179,9 +216,9 @@ class AlignedBam_v1_4(p: Path, nBins: Int = 30) extends Metrics {
   def accuracy(len: Int, keys: Seq[String], cigarMap: Map[String, Int]): Float =
     return 1f - (keys.flatMap(cigarMap.get).sum.toFloat / len)
 
-  def accuracyWithClip(l: Int, c: Map[String, Int]): Float = accuracy(l, Seq("M", "I", "D", "N", "S", "H"), c)
+  def accuracyWithClip(l: Int, c: Map[String, Int]): Float = accuracy(l, Seq("X", "I", "D", "N", "S", "H"), c)
 
-  def accuracyNoClip(l: Int, c: Map[String, Int]): Float = accuracy(l, Seq("M", "I", "D"), c)
+  def accuracyNoClip(l: Int, c: Map[String, Int]): Float = accuracy(l, Seq("X", "I", "D"), c)
 
   def refAccuracyWithClip(refLen: Int, cigarMap: Map[String, Int]): Float = accuracyWithClip(refLen, cigarMap)
 
